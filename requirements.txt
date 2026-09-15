@@ -1,0 +1,20 @@
+# --- Agent framework ---
+langgraph>=0.2.60          # State-graph orchestration: nodes, edges, validation loops
+langchain-core>=0.3.29     # Base abstractions (messages, prompts) used by langgraph
+langchain-groq>=0.2.3      # ChatGroq: LangChain wrapper around Groq's ultra-fast inference API
+
+# --- Search / retrieval ---
+tavily-python>=0.5.0       # Primary search: LLM-optimized results with extracted page content
+ddgs>=9.0.0                # Fallback search: DuckDuckGo, no API key required
+
+# --- Web frontend & report rendering ---
+fastapi>=0.115.0           # API backend serving the web UI
+uvicorn>=0.32.0            # ASGI server that runs the FastAPI app
+markdown>=3.7              # Markdown -> HTML (for the web report view and PDF)
+nh3>=0.2.18                # HTML sanitizer: report text derives from scraped pages
+xhtml2pdf>=0.2.16          # HTML -> PDF (pure Python, no native deps, deploys anywhere)
+
+# --- Support ---
+python-dotenv>=1.0.1       # Loads API keys from a local .env file
+pydantic>=2.9.0            # Structured (schema-validated) LLM outputs
+tenacity>=9.0.0            # Retry with exponential backoff for flaky network calls

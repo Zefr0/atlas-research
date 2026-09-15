@@ -1,0 +1,13 @@
+# Secrets — never commit real API keys
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Generated output
+reports/
+
+# Local editor/dev-server config (machine-specific absolute paths)
+.claude/
