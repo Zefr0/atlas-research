@@ -1,78 +1,143 @@
-# Multi-Agent Autonomous Research Assistant
+# Atlas — Multi-Agent Research Assistant
 
-A web app where four cooperating agents (Manager → Researcher → Writer →
-Fact-Checker) research a question and produce a **cited report**, viewable in the
-browser and downloadable as Markdown or PDF. Built on **LangGraph** + **Groq**,
-with live web search via **Tavily** (DuckDuckGo fallback) and a self-correcting
-fact-checking loop.
+Atlas transforms open-ended research questions into structured, cited reports through a coordinated multi-agent workflow.
 
-## Setup (Windows / PowerShell)
+The system decomposes a question into focused research tasks, gathers evidence from the web, synthesizes the findings into a report, and validates the result through an automated fact-checking loop.
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-copy .env.example .env
-# then edit .env and paste your GROQ_API_KEY (and optionally TAVILY_API_KEY)
+## Architecture
+
+Atlas is built around a stateful LangGraph workflow. Each agent has a focused responsibility and communicates through a shared typed research state.
+
+```text
+User Question
+      │
+      ▼
+Manager Agent
+Decomposes the question into focused sub-questions
+and defines the report outline
+      │
+      ▼
+Researcher Agent
+Searches the web and extracts source-backed findings
+for each sub-question
+      │
+      ▼
+Writer Agent
+Synthesizes the findings into a structured,
+citation-aware report
+      │
+      ▼
+Fact-Checker Agent
+Reviews claims, citations, and factual consistency
+      │
+      ├── Issues found ──► Writer Agent
+      │
+      └── Approved ──────► Final Report
 ```
 
-API keys (both have free tiers):
-- **Groq** (required): https://console.groq.com/keys
-- **Tavily** (optional, much better search): https://app.tavily.com — without it,
-  the app falls back to DuckDuckGo plus its own page-text fetching.
+The workflow is iterative rather than one-shot. When the fact-checker identifies unsupported claims, weak citations, or inconsistencies, the draft is returned to the writer with structured feedback. The process continues until the report passes validation or reaches its configured revision limit.
 
-## Run
+## Agent Responsibilities
 
-```powershell
-.\.venv\Scripts\python.exe -m src.web.app
-```
+### Manager Agent
 
-Then open **http://localhost:8010**. Type a question, watch the four agents work
-live, read the report, and download it as PDF or Markdown. Past reports are
-listed in the history panel.
+Converts a broad research question into focused sub-questions and defines the structure of the final report.
 
-`HOST` and `PORT` environment variables override the defaults. The default host
-is `127.0.0.1` on purpose — **the app has no authentication**, so anyone who can
-reach the port can spend your Groq quota. Put auth in front of it before
-exposing it beyond your machine.
+### Researcher Agent
 
-Deploy the same app behind any ASGI host:
+Searches for relevant sources, retrieves page content, and produces findings linked to their originating sources.
 
-```powershell
-.\.venv\Scripts\python.exe -m uvicorn src.web.app:app --host 0.0.0.0 --port 8010
-```
+### Writer Agent
 
-## Project layout
+Combines the research findings into a coherent report with headings, explanations, and inline citations. It can revise the report using fact-checking feedback.
 
-```
+### Fact-Checker Agent
+
+Reviews the report for citation integrity, unsupported claims, factual concerns, and inconsistencies. It decides whether the report is ready or requires another revision cycle.
+
+## Shared Research State
+
+Agents communicate through a typed shared state object containing:
+
+- The original research question
+- Generated sub-questions and report outline
+- Search results and extracted findings
+- The current report draft
+- Fact-checking feedback
+- Revision count and workflow metadata
+
+Keeping this information in an explicit state object makes the workflow observable, testable, and easier to extend with additional agents or validation stages.
+
+## Key Technical Features
+
+### Stateful Graph Orchestration
+
+LangGraph manages agent execution, state transitions, conditional routing, and the writer–fact-checker revision loop.
+
+### Structured Model Outputs
+
+Pydantic schemas define the expected shape of intermediate agent responses. This provides validation between workflow stages and reduces ambiguity when agents exchange information.
+
+### Evidence-Grounded Research
+
+Atlas uses Tavily for research-oriented search and supports DuckDuckGo as a fallback. Search results are supplemented with page-content retrieval so that reports can be grounded in source material rather than search snippets alone.
+
+### Model Reliability
+
+Model calls include retry handling and configurable model fallback. The workflow can continue with a secondary model when the primary model is unavailable or reaches a usage limit.
+
+### Real-Time Progress Events
+
+The backend emits progress events while a research task is running. The browser interface displays the active workflow stage, agent activity, and completed report as execution proceeds.
+
+### Report Export
+
+Completed reports can be viewed in the browser and exported as Markdown or styled PDF documents.
+
+## Project Structure
+
+```text
 src/
-  config.py                 .env loading + validation (fail fast)
-  state.py                  Shared graph state (the agents' "whiteboard")
-  schemas.py                Pydantic contracts for structured LLM outputs
-  llm.py                    Groq model factory + retries and model failover
-  console.py                Progress logging (server log + web UI stream)
-  events.py                 Thread-local progress sink powering the live UI
-  graph.py                  LangGraph wiring: nodes, edges, validation loop
-  export.py                 Markdown report export
-  pdf.py                    Markdown -> sanitized HTML -> styled PDF
-  tools/search.py           Tavily search with DuckDuckGo + page-fetch fallback
-  agents/manager.py         Task decomposition -> sub-questions + outline
-  agents/researcher.py      Web search + sourced fact extraction
-  agents/writer.py          Cited Markdown synthesis (handles revisions)
-  agents/fact_checker.py    Citation integrity + LLM claim validation
-  web/app.py                FastAPI backend + server entry point (`main()`)
-  web/static/               Frontend: index.html, styles.css, app.js
-reports/                    Generated reports (.md + .pdf), created on first run
+├── agents/
+│   ├── manager.py
+│   ├── researcher.py
+│   ├── writer.py
+│   └── fact_checker.py
+├── tools/
+│   └── search.py
+├── web/
+│   ├── app.py
+│   └── static/
+├── config.py
+├── events.py
+├── graph.py
+├── llm.py
+├── schemas.py
+├── state.py
+├── export.py
+└── pdf.py
 ```
 
-See [HANDOVER.md](HANDOVER.md) for the full architecture walkthrough,
-implementation notes, and troubleshooting history.
+## End-to-End Workflow
 
-## Tuning
+1. A user submits a research question through the web interface.
+2. The manager creates focused sub-questions and a report outline.
+3. The researcher gathers source-backed findings for each sub-question.
+4. The writer creates a cited report from the collected evidence.
+5. The fact-checker evaluates the draft and returns structured feedback.
+6. The writer revises the report when validation issues are found.
+7. The validated report is displayed and made available for export.
 
-In `.env`:
-- `GROQ_MODEL` — primary chat model (default `openai/gpt-oss-120b`)
-- `GROQ_FALLBACK_MODEL` — auto-failover model with its own daily quota
-  (default `openai/gpt-oss-20b`; leave empty to disable)
-- `MAX_REVISIONS` — fact-check/rewrite loops before shipping with warnings (default 2)
-- `MAX_SEARCH_RESULTS` — web results per sub-question (default 5)
+## Technology
+
+- Python
+- LangGraph
+- LangChain Core
+- Groq
+- FastAPI
+- Pydantic
+- Tavily
+- DuckDuckGo Search
+- Markdown
+- xhtml2pdf
+- HTML, CSS, and JavaScript
